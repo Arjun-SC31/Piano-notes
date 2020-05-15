@@ -1,0 +1,179 @@
+% noteparse.m
+% usage: divs = noteparse(data)
+% takes in a double array specified by data
+% and outputs a vector of division points
+% that correspond to seperate and distinct notes
+% in other words, trying to find when one note stops
+% and another starts.
+% the returned vector will include the midpoint of the
+% end of note and the beginning of the next.
+[data,Fs]=audioread(&#39;68448__pinkyfinger__piano-g.wav&#39;);
+function divs = noteparse(data)
+len = length(data)
+%let&#39;s find a threshold value so we know when a note
+starts/stops
+threshup = .2 * max(data) % 20% of the maximum value
+threshdown = .04 * max(data)
+quiet=1; % a flag so we know if we&#39;re noisy or quiet right
+now
+j=1;
+for i=51:len-50,
+if quiet == 1 % we&#39;re trying find the begining of a
+note
+if (max(abs(data(i-50:i+50))) &gt; threshup)
+quiet = 0; % we found it
+divs(j) = i; %record this division point
+j=j+1;
+end
+else
+if (max(abs(data(i-50:i+50))) &lt; threshdown)
+quiet = 1; %note&#39;s over
+divs(j) = i;
+j=j+1;
+end
+end
+end
+end
+% notewindows
+
+% usage:
+% w = notewindows(data)
+%
+% and data is the sampled sound
+function w = notewindows(data)
+% this is basically just a nice,pretty wrapper for
+noteparse
+divs = noteparse(data);
+% let&#39;s first massage the intervals by adding the beginning
+and end points
+d2(1) = 0;
+for i=1:length(divs),
+d2(i+1)=divs(i);
+end
+d2(length(divs)+2) = length(data);
+for i=1:length(d2)/2,
+w(i) = (d2(2*i-1) + d2(2*i))/2;
+end
+end
+% noterecog.m
+% note recognition function
+% usage: notes = noterecog(data)
+%
+% where data is an array of sample points
+function notes = noterecog(data)
+tic;
+% get the note windows
+w = notewindows(data)
+% how many notes in this sample
+num_notes = length(w)-1;
+for i=1:num_notes,
+%take the window for the current note
+cur_note = data(w(i):w(i+1));
+
+cur_fft = abs(fft(cur_note));
+cur_fft = cur_fft(1:length(cur_fft)/2);
+%figure(i); plot(cur_fft)
+[Y,I] = max(cur_fft);
+% I is the frequency of the note
+freqs(i) = I;
+end
+%let&#39;s go through one more time to get rid of any noisy
+notes
+j=1;
+for i=1:num_notes
+if ((freqs(i) &gt; 20) &amp; (freqs(i) &lt; 20000))
+f(j) = freqs(i);
+j=j+1;
+end
+end
+for i=1:length(f),
+[p,o] = findpitch(f(i));
+%notes(i,1) =
+notes(i,2) = o;
+notes(i,3) = p;
+end
+toc
+end
+function [pitch, octave] = findpitch(freq)
+%%%% Function takes in a frequency and returns the musical
+pitch of the frequency
+%%%% and its octave relative to the octave above middle C.
+%%%% Notes of the musical scale are assigned the following
+numerical values:
+%%%% C = 1
+%%%% C# = 2
+%%%% D = 3
+%%%% D# = 4
+%%%% E = 5
+%%%% F = 6
+%%%% F# = 7
+%%%% G = 8
+%%%% G# = 9
+%%%% A = 10
+
+%%%% A# = 11
+%%%% B = 12
+%%%% Octaves relative to the 12 notes of the &quot;middle-C
+octave&quot; are assigned a number
+%%%% corresponding to the number of octaves above or below
+the middle-C octave.
+%%%% For example a B two octaves above the B in the middle-
+C octave is assigned (12, 2),
+%%%% while a B two octaves below the middle-C octave is
+assigned (12, -2).
+octave = helpfindoctave(freq, 0)
+pitch = choosepitch(freq/2^octave)
+end
+function p = choosepitch(f)
+%%%% Function takes in a number and returns a number. That
+is, it takes in a frequency,
+%%%% and returns the number of the musical pitch. Notes
+the the frequency must be in the
+%%%% middle-C octave range or else the function will return
+an error.
+if f &gt;= 254.284 &amp; f &lt; 269.4045
+p = 1;
+elseif f &gt;= 269.4045 &amp; f &lt; 285.424
+p = 2;
+elseif f &gt;= 285.424 &amp; f &lt; 302.396
+p = 3;
+elseif f &gt;= 302.396 &amp; f &lt; 320.3775
+p = 4;
+elseif f &gt;= 320.3775 &amp; f &lt; 339.428
+p = 5;
+elseif f &gt;= 339.428 &amp; f &lt; 359.611
+p = 6;
+elseif f &gt;= 359.611 &amp; f &lt; 380.9945
+p = 7;
+elseif f &gt;= 380.9945 &amp; f &lt; 403.65
+p = 8;
+elseif f &gt;= 403.65 &amp; f &lt; 427.6525
+p = 9;
+elseif f &gt;= 427.6525 &amp; f &lt; 453.082
+p = 10;
+elseif f &gt;= 453.082 &amp; f &lt; 480.0235
+p = 11;
+
+elseif f &gt;= 480.0235 &amp; f &lt; 508.567
+p = 12;
+else
+error(&#39;frequency outside of acceptable range&#39;)
+end
+end
+function oct = helpfindoctave(f, o)
+%%%% Function checks to see if f is in the acceptable
+range. If it is, then
+%%%% function returns the octave count, &quot;o&quot;. If it is not,
+the function determines whether
+%%%% pitch is too high or too low, adds the appropriate
+number to the octave count,
+%%%% &quot;o&quot;, and recurs on itself until the frequency, &quot;f&quot;, is
+in the proper range.
+if f &gt;= 254.284 &amp; f &lt;= 508.5675
+oct = o;
+elseif f &lt; 254.284
+oct = helpfindoctave(2*f, o-1);
+elseif f &gt; 508.5675
+oct = helpfindoctave(f/2, o+1);
+end
+end
